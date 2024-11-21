@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using System.Diagnostics;
 
-namespace Gemity.Api
+namespace Gemity.Common
 {
     public static class Debug
     {
