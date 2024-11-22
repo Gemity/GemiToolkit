@@ -55,5 +55,16 @@ namespace Codomaster.Extensions
         {
             renderTexture.WriteToTexture2D(sprite.texture);
         }
+
+        public static void ReleaseTexture(this RenderTexture renderTexture)
+        {
+            if (renderTexture != null && renderTexture.IsCreated())
+            {
+                if (RenderTexture.active == renderTexture)
+                    RenderTexture.active = null;
+                renderTexture.Release();
+                UnityEngine.Object.Destroy(renderTexture);
+            }
+        }
     }
 }

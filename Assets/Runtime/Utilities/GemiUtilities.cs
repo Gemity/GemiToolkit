@@ -5,73 +5,13 @@ using System;
 using System.Linq;
 using System.Reflection;
 
-public static class Utilities
+public static class GemiUtilities
 {
-    public static AnimationClip GetClipByIndex(this Animation animation, int index)
-    {
-        int i = 0;
-        foreach (AnimationState animationState in animation)
-        {
-            if (i == index)
-                return animationState.clip;
-            i++;
-        }
-        return null;
-    }
-    public static void TryMove2Target(this Transform transform, Vector3 target, float vel, Action onEndMove)
-    {
-        transform.position = Vector3.MoveTowards(transform.position, target, vel * Time.deltaTime);
-        if (Vector3.SqrMagnitude(transform.position - target) < 0.01f)
-        {
-            transform.position = target;
-            onEndMove?.Invoke();
-        }
-    }
-
-    public static void TryRotate2Target(this Transform transform, Quaternion target, float vel)
-    {
-        transform.rotation = Quaternion.RotateTowards(transform.rotation, target, vel * Time.deltaTime);
-    }
-
-    public static Sprite CreateSpriteFromRenderTexture(RenderTexture renderTexture)
-    {
-        // Create a new Texture2D and read the pixels from the RenderTexture
-        Texture2D texture = new Texture2D(renderTexture.width, renderTexture.height, TextureFormat.RGBA32, false);
-        RenderTexture.active = renderTexture;
-        texture.ReadPixels(new Rect(0, 0, renderTexture.width, renderTexture.height), 0, 0);
-        texture.Apply();
-        RenderTexture.active = null;
-
-        // Create a new Sprite from the Texture2D
-        Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f,0.5f), 100);
-        return sprite;
-    }
-
     public static Sprite CreateSprite(int width, int height)
     {
         Texture2D texture = new Texture2D(width, height, TextureFormat.RGBA32, false);
         Sprite sprite = Sprite.Create(texture, new Rect(0, 0, texture.width, texture.height), new Vector2(0.5f, 0.5f), 100);
         return sprite;
-    }
-
-    public static void CloneShareMaterial4Renderer(Renderer[] renderers, Dictionary<int, Material> cloneMat)
-    {
-        cloneMat.Clear();
-        foreach (var renderer in renderers)
-        {
-            Material[] sharedMat = renderer.sharedMaterials;
-            Material[] clone = new Material[sharedMat.Length];
-            for (int i = 0; i < sharedMat.Length; i++)
-            {
-                int id = sharedMat[i].GetInstanceID();
-                if (!cloneMat.ContainsKey(id))
-                    cloneMat.Add(id, new Material(sharedMat[i]));
-
-                clone[i] = cloneMat[id];
-            }
-
-            renderer.sharedMaterials = clone;
-        }
     }
 
     public static string FormatString(float f)
@@ -87,11 +27,11 @@ public static class Utilities
 
     public static Texture2D CaptureCamera(Camera cam)
     {
-        RenderTexture screenTexture = new RenderTexture(Screen.width, Screen.height, 16);
+        RenderTexture screenTexture = new(Screen.width, Screen.height, 16);
         cam.targetTexture = screenTexture;
         RenderTexture.active = screenTexture;
         cam.Render();
-        Texture2D renderedTexture = new Texture2D(Screen.width, Screen.height);
+        Texture2D renderedTexture = new(Screen.width, Screen.height);
         renderedTexture.ReadPixels(new Rect(0, 0, Screen.width, Screen.height), 0, 0);
         RenderTexture.active = null;
         renderedTexture.Apply();
@@ -112,12 +52,6 @@ public static class Utilities
         camera.cullingMask = preMask;
 
         return rt;
-    }
-
-    public static T GetRandomElement<T>(this ICollection<T> collection)
-    {
-        int index = UnityEngine.Random.Range(0, collection.Count);
-        return collection.ToList().ElementAt(index);
     }
 
     public static void DebugDrawBounds(Bounds b, Color color, float delay = 0)
@@ -249,59 +183,5 @@ public static class Utilities
         Mesh mesh = new Mesh();
         mesh.CombineMeshes(combine);
         return mesh;
-    }
-
-    public static void ReleaseTexture(this RenderTexture renderTexture)
-    {
-        if (renderTexture != null && renderTexture.IsCreated())
-        {
-            if (RenderTexture.active == renderTexture)
-                RenderTexture.active = null;
-            renderTexture.Release();
-            UnityEngine.Object.Destroy(renderTexture);
-        }
-    }
-
-    public static Texture2D GetTexture2D(this RenderTexture renderTexture)
-    {
-        var format = TextureFormat.ARGB32;
-        if (renderTexture.format == RenderTextureFormat.RFloat)
-        {
-            format = TextureFormat.RFloat;
-        }
-        var texture2D = new Texture2D(renderTexture.width, renderTexture.height, format, false);
-        var previousRenderTexture = RenderTexture.active;
-        RenderTexture.active = renderTexture;
-        texture2D.ReadPixels(new Rect(0, 0, texture2D.width, texture2D.height), 0, 0, false);
-        texture2D.Apply();
-        RenderTexture.active = previousRenderTexture;
-        return texture2D;
-    }
-
-    public static Coroutine InvokeRoutine(this MonoBehaviour mb, Action action, float delay)
-    {
-        return mb.StartCoroutine(InvokeRoutine(action, delay));
-    }
-
-    private static IEnumerator InvokeRoutine(System.Action action, float delay)
-    {
-        yield return new WaitForSeconds(delay);
-        action();
-    }
-
-    /// <summary>
-    /// value in range (min, max)
-    /// </summary>
-    public static bool InRange(this float value, float min, float max) 
-    { 
-        return min < value && value < max;
-    }
-
-    /// <summary>
-    /// value in range [min, max]
-    /// </summary>
-    public static bool InRange(this int value, int min, int max)
-    {
-        return min <= value && value <= max;
     }
 }
