@@ -2,6 +2,7 @@
 
 using UnityEngine;
 using System.Collections;
+using Cysharp.Threading.Tasks;
 
 namespace SS.View
 {
@@ -50,22 +51,19 @@ namespace SS.View
 
         #endregion
 
-        void Awake()
+        public override void Init()
         {
-            if (Application.isPlaying)
+            if (Manager.SceneAnimationDuration > 0)
             {
-                if (Manager.SceneAnimationDuration > 0)
-                {
-                    m_AnimationDuration = Manager.SceneAnimationDuration;
-                }
-                else
-                {
-                    m_AnimationDuration = 0.283f;
-                }
-
-                m_ShowEase = GetEasingFunction(m_ShowEaseType);
-                m_HideEase = GetEasingFunction(m_HideEaseType);
+                _animationDuration = Manager.SceneAnimationDuration;
             }
+            else
+            {
+                _animationDuration = 0.3f;
+            }
+
+            m_ShowEase = GetEasingFunction(m_ShowEaseType);
+            m_HideEase = GetEasingFunction(m_HideEaseType);
         }
 
         RectTransform RectTransform
@@ -141,8 +139,11 @@ namespace SS.View
             }
         }
 
-        public override void Show()
+        public override async UniTask Show()
         {
+            if (m_AnimationType == AnimationType.None)
+                return;
+
             switch (m_AnimationType)
             {
                 case AnimationType.SlideFromBottom:
@@ -171,21 +172,15 @@ namespace SS.View
                     break;
             }
 
-            if (m_AnimationType != AnimationType.None)
-            {
-                m_State = State.SHOW;
-                this.Play();
-            }
-            else
-            {
-                //RectTransform.anchoredPosition = m_End;
-                OnShown();
-            }
-
+            m_State = State.SHOW;
+            await Play();
         }
 
-        public override void Hide()
+        public override async UniTask Hide()
         {
+            if (m_AnimationType == AnimationType.None)
+                return;
+
             switch (m_AnimationType)
             {
                 case AnimationType.SlideFromBottom:
@@ -214,16 +209,8 @@ namespace SS.View
                     break;
             }
 
-            if (m_AnimationType != AnimationType.None)
-            {
-                m_State = State.HIDE;
-                this.Play();
-            }
-            else
-            {
-                //RectTransform.anchoredPosition = m_End;
-                OnHidden();
-            }
+            m_State = State.HIDE;
+            await Play();
         }
 
         protected override void ApplyProgress(float progress)
@@ -246,22 +233,7 @@ namespace SS.View
             }
         }
 
-        protected override void OnEndAnimation()
-        {
-            switch (m_State)
-            {
-                case State.SHOW:
-                    OnShown();
-                    break;
-                case State.HIDE:
-                    OnHidden();
-                    break;
-            }
-
-            m_State = State.IDLE;
-        }
-
-        float ScreenHeight()
+        private float ScreenHeight()
         {
             if (CanvasRectTransform != null)
             {
@@ -270,7 +242,7 @@ namespace SS.View
             return Screen.height;
         }
 
-        float ScreenWidth()
+        private float ScreenWidth()
         {
             if (CanvasRectTransform != null)
             {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.EventSystems;
+using Cysharp.Threading.Tasks;
 
 namespace SS.View
 {
@@ -24,152 +25,92 @@ namespace SS.View
         // Shield & Transition
         [SerializeField] private Image _shield;
         [SerializeField] private EaseType _fadeInEaseType = EaseType.easeInOutExpo;
-        [SerializeField] EaseType _fadeOutEaseType = EaseType.easeInOutExpo;
+        [SerializeField] private EaseType _fadeOutEaseType = EaseType.easeInOutExpo;
         [SerializeField] private Color _shieldColor = Color.black;
 
-        // Shield & Transition Vars
-        bool m_Active;
-        State m_State;
-        public State GetState() { return m_State; }
+        private State _state;
+        public State GetState() { return _state; }
 
-        EasingFunction m_FadeInEase;
-        EasingFunction m_FadeOutEase;
+        private EasingFunction _fadeInEase;
+        private EasingFunction _fadeOutEase;
 
-        float m_StartAlpha;
-        float m_EndAlpha;
         public Camera UICamera => _uiCamera;
 
         #region Shield & Transition methods
         public void ShieldOff()
         {
-            if (m_State == State.SHIELD_ON)
+            _state = State.SHIELD_OFF;
+            ActiveShield = false;
+        }
+
+        public void ShieldOn(Color c = default)
+        {
+            _state = State.SHIELD_ON;
+            ActiveShield = true;
+
+            _shield.color = c;
+        }
+
+        public async UniTask FadeInScene()
+        {
+            if (Manager.SceneFadeDuration == 0)
+                ShieldOff();
+            else
             {
-                m_State = State.SHIELD_OFF;
-                Active = false;
+                ActiveShield = true;
+
+                _animationDuration = Manager.SceneFadeDuration;
+                _state = State.SHIELD_FADE_IN;
+                await Play();
+
+                ShieldOff();
             }
         }
 
-        public void ShieldOn()
+        public async UniTask FadeOutScene()
         {
-            if (m_State == State.SHIELD_OFF)
+            if (Manager.SceneFadeDuration == 0)
+                ShieldOff();
+            else
             {
-                m_State = State.SHIELD_ON;
-                Active = true;
+                ActiveShield = true;
 
-                _shield.color = Color.clear;
+                _animationDuration = Manager.SceneFadeDuration;
+                _state = State.SHIELD_FADE_OUT;
+                await Play();
+
+                ShieldOff();
+                _state = State.SCENE_LOADING;
             }
         }
 
-        public void ShieldOnColor()
+        public bool ActiveShield
         {
-            if (m_State == State.SHIELD_OFF)
-            {
-                m_State = State.SHIELD_ON;
-                Active = true;
-
-                _shield.color = _shieldColor;
-            }
-        }
-
-        // Scene gradually appear
-        public void FadeInScene()
-        {
-            if (this != null)
-            {
-                if (Manager.SceneFadeDuration == 0)
-                {
-                    ShieldOff();
-                }
-                else
-                {
-                    Active = true;
-
-                    m_StartAlpha = 1;
-                    m_EndAlpha = 0;
-
-                    this.m_AnimationDuration = Manager.SceneFadeDuration;
-                    this.Play();
-
-                    m_State = State.SHIELD_FADE_IN;
-                }
-            }
-        }
-
-        // Scene gradually disappear
-        public void FadeOutScene()
-        {
-            if (this != null)
-            {
-                if (Manager.SceneFadeDuration == 0)
-                {
-                    OnFadedOut();
-                    ShieldOn();
-                }
-                else
-                {
-                    Active = true;
-
-                    m_StartAlpha = 0;
-                    m_EndAlpha = 1;
-
-                    this.m_AnimationDuration = Manager.SceneFadeDuration;
-                    this.Play();
-
-                    m_State = State.SHIELD_FADE_OUT;
-                }
-            }
-        }
-
-        public void OnFadedIn()
-        {
-            if (this != null)
-            {
-                m_State = State.SHIELD_OFF;
-                Active = false;
-                Manager.EndFadedIn();
-            }
-        }
-
-        public void OnFadedOut()
-        {
-            m_State = State.SCENE_LOADING;
-            Manager.EndFadedOut();
-        }
-
-        public bool Active
-        {
-            get
-            {
-                return m_Active;
-            }
-            protected set
-            {
-                m_Active = value;
-                _shield.gameObject.SetActive(m_Active);
-            }
+            get =>  _state != State.SHIELD_OFF;
+            protected set => _shield.gameObject.SetActive(value);
         }
 
         protected override void ApplyProgress(float progress)
         {
-            EasingFunction ease = (m_State == State.SHIELD_FADE_IN) ? m_FadeInEase : m_FadeOutEase;
+            EasingFunction ease;
+            float start, end;
+
+            if (_state == State.SHIELD_FADE_IN)
+            {
+                ease = _fadeInEase;
+                start = 1;
+                end = 0;
+            }
+            else
+            {
+                ease = _fadeOutEase;
+                start = 0;
+                end = 1;
+            }
 
             Color color = _shieldColor;
-            color.a = ease(m_StartAlpha, m_EndAlpha, progress);
-
+            color.a = ease(start, end, progress);
             _shield.color = color;
-        }
-
-        protected override void OnEndAnimation()
-        {
-            switch (m_State)
-            {
-                case State.SHIELD_FADE_IN:
-                    OnFadedIn();
-                    break;
-                case State.SHIELD_FADE_OUT:
-                    OnFadedOut();
-                    break;
-            }
         }
         #endregion
 
@@ -186,11 +127,11 @@ namespace SS.View
             }
             DontDestroyOnLoad(eventSystem.gameObject);
 
-            m_FadeInEase = GetEasingFunction(_fadeInEaseType);
-            m_FadeOutEase = GetEasingFunction(_fadeOutEaseType);
+            _fadeInEase = GetEasingFunction(_fadeInEaseType);
+            _fadeOutEase = GetEasingFunction(_fadeOutEaseType);
         }
 
-        IEnumerator Start()
+        private IEnumerator Start()
         {
             yield return 0;
 
@@ -202,16 +143,6 @@ namespace SS.View
 
             if (_canvas.GetComponent<Canvas>().worldCamera == null)
                 _canvas.GetComponent<Canvas>().worldCamera = this.UICamera;
-
-            var canvases = FindObjectsOfType<Canvas>();
-            foreach (var canvas in canvases)
-            {
-                if (canvas.renderMode != RenderMode.WorldSpace && canvas.GetComponent<DontChangeCanvasCamera>() == null)
-                {
-                    canvas.renderMode = RenderMode.ScreenSpaceCamera;
-                    canvas.worldCamera = this.UICamera;
-                }
-            }
 
             yield return 0;
             ShieldOff();

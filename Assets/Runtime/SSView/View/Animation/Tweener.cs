@@ -1,7 +1,7 @@
-﻿// This code is part of the SS-Scene library, released by Anh Pham (anhpt.csit@gmail.com).
-
+﻿using Cysharp.Threading.Tasks;
 using System.Collections;
 using System.Collections.Generic;
+using System.Threading;
 using UnityEngine;
 
 namespace SS.View
@@ -46,54 +46,41 @@ namespace SS.View
             easeInOutElastic,
         }
 
-        protected bool m_IsPlaying;
-        protected float m_AnimationDuration;
-        protected float m_StartTime;
+        protected float _animationDuration;
+        private CancellationTokenSource _tokenSource;
+        private CancellationToken _token;
 
         protected virtual void ApplyProgress(float progress)
         {
         }
 
-        protected virtual void OnEndAnimation()
+        public virtual async UniTask Play()
         {
-        }
-
-        public virtual void Play()
-        {
-            m_IsPlaying = true;
-            m_StartTime = Time.time;
-        }
-
-        protected virtual void Stop(bool callback = false)
-        {
-            m_IsPlaying = false;
-
-            if (callback)
+            ResignCancelToken();
+            float timer = 0;
+            while(timer < _animationDuration && !_tokenSource.IsCancellationRequested)
             {
-                OnEndAnimation();
-            }
-        }
-
-        protected virtual void Update()
-        {
-            if (Application.isPlaying)
-            {
-                UpdateProgress();
-            }
-        }
-
-        protected virtual void UpdateProgress()
-        {
-            if (m_IsPlaying)
-            {
-                float time = Time.time - m_StartTime;              
-                float progress = Mathf.Clamp01(time / m_AnimationDuration);
-
+                float progress = Mathf.Clamp01(timer / _animationDuration);
                 ApplyProgress(progress);
+                await UniTask.Yield();
 
-                if (progress == 1)
-                    Stop(true);
+                timer += Time.deltaTime;
             }
+
+            if (timer > _animationDuration)
+                ApplyProgress(1);
+        }
+
+        public virtual void Stop()
+        {
+            _tokenSource.Cancel();
+        }
+
+        private void ResignCancelToken()
+        {
+            _tokenSource?.Dispose();
+            _tokenSource = new();
+            _token = _tokenSource.Token;
         }
 
         protected EasingFunction GetEasingFunction(EaseType easeType)

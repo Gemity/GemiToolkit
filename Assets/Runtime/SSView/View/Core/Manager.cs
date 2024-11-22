@@ -1,7 +1,10 @@
 ﻿using UnityEngine;
 using UnityEngine.SceneManagement;
-
 using System.Collections.Generic;
+using Cysharp.Threading.Tasks;
+using System.Threading;
+using Gemity.Common;
+using Debug = Gemity.Common.Debug;
 
 namespace SS.View
 {
@@ -13,21 +16,14 @@ namespace SS.View
             public Callback onShown;
             public Callback onHidden;
             public Scene scene;
-
-            public Data(object data, Callback onShown, Callback onHidden)
-            {
-                this.data = data;
-                this.onShown = onShown;
-                this.onHidden = onHidden;
-            }
+            public LoadSceneMode loadMode;
         }
 
         public delegate void Callback();
 
-        static Stack<Controller> m_ControllerStack = new Stack<Controller>();
-        static Queue<Data> m_DataQueue = new Queue<Data>();
+        static Stack<Controller> _controllerStack = new();
+        static Queue<Data> m_DataQueue = new();
 
-        static bool m_SetupCover;
         static bool m_LoadingActive;
 
         static string m_MainSceneName;
@@ -40,7 +36,7 @@ namespace SS.View
         {
             get
             {
-                return m_ControllerStack.Count;
+                return _controllerStack.Count;
             }
         }
 
@@ -80,7 +76,7 @@ namespace SS.View
         {
             Application.targetFrameRate = 60;
 
-            SceneManager.sceneLoaded += OnSceneLoaded;
+            ServicesDispatch.Add<SSControllerService>(SSControllerService.SceneLoaded, OnSceneLoaded);
 
             ShieldColor = new Color(0f, 0f, 0f, 0.45f);
             SceneFadeDuration = 0.15f;
@@ -90,32 +86,71 @@ namespace SS.View
             Object.gameObject.name = "ManagerObject";
         }
 
-        public static void Load(string sceneName, object data = null)
+        public static async void Load(string sceneName, object data = null)
         {
-            if (Object.GetState() == ManagerObject.State.SHIELD_FADE_IN) //if scene load shield is active
-            {
-                Debug.LogWarning("Scene is fading in/out, this load will be ignored");
+            if(!CanLoadScene())
                 return;
-            }
 
-            m_DataQueue.Enqueue(new Data(data, null, null));
+            m_DataQueue.Enqueue(new() { data = data, loadMode = LoadSceneMode.Single});
             m_MainSceneName = sceneName;
-            Object.FadeOutScene();
+
+            await Object.FadeOutScene();
+
+            if (m_MainController != null)
+                m_MainController.OnHidden();
+
+            SceneManager.LoadScene(m_MainSceneName, LoadSceneMode.Single);
+        }
+
+        public static async void LoadAsync(string sceneName, object data = null)
+        {
+            if (!CanLoadScene())
+                return;
+
+            m_DataQueue.Enqueue(new() { data = data, loadMode = LoadSceneMode.Single});
+            m_MainSceneName = sceneName;
+
+            await Object.FadeOutScene();
+
+            if (m_MainController != null)
+                m_MainController.OnHidden();
+
+            await SceneManager.LoadSceneAsync(m_MainSceneName, LoadSceneMode.Single);
+        }
+
+        public static async UniTask PreLoadAsync(string sceneName, object data = null, CancellationToken token = default)
+        {
+            if (!CanLoadScene())
+                return;
+
+            m_DataQueue.Enqueue(new() { data = data, loadMode = LoadSceneMode.Single });
+            m_MainSceneName = sceneName;
+
+            await Object.FadeOutScene();
+
+            if (m_MainController != null)
+                m_MainController.OnHidden();
+
+            var loadOperation = SceneManager.LoadSceneAsync(m_MainSceneName, LoadSceneMode.Single);
+            while(!loadOperation.isDone && !token.IsCancellationRequested)
+                await UniTask.Yield();
+
+            loadOperation.allowSceneActivation = false;
         }
 
         public static void Add(string sceneName, object data = null, Callback onShown = null, Callback onHidden = null)
         {
-            m_DataQueue.Enqueue(new Data(data, onShown, onHidden));
+            m_DataQueue.Enqueue(new() { data = data, loadMode = LoadSceneMode.Additive, onShown = onShown, onHidden = onHidden });
             Object.ShieldOn();
             SceneManager.LoadScene(sceneName, LoadSceneMode.Additive);
         }
 
         public static void Close()
         {
-            if (m_ControllerStack.Count > 0)
+            if (_controllerStack.Count > 0)
             {
                 Object.ShieldOn();
-                m_ControllerStack.Peek().Hide();
+                _controllerStack.Peek().Hide();
             }
         }
 
@@ -145,23 +180,20 @@ namespace SS.View
             }
         }
 
-        public static void OnShown(Controller controller)
+        internal static void OnShown(Controller controller)
         {
-            controller.OnShown();
             controller.Data.onShown?.Invoke();
             Object.ShieldOff();
         }
 
-        public static void OnHidden(Controller controller)
+        internal static void OnHidden(Controller controller)
         {
-            controller.OnHidden();
             controller.Data.onHidden?.Invoke();
+            SceneManager.UnloadSceneAsync(_controllerStack.Pop().Data.scene);
 
-            Unload();
-
-            if (m_ControllerStack.Count > 0)
+            if (_controllerStack.Count > 0)
             {
-                var currentController = m_ControllerStack.Peek();
+                var currentController = _controllerStack.Peek();
                 currentController.OnReFocus();
             }
 
@@ -170,118 +202,56 @@ namespace SS.View
 
         public static bool IsActiveShield()
         {
-            return Object.Active || m_LoadingActive;
+            return Object.ActiveShield || m_LoadingActive;
         }
 
-        public static Controller TopController()
+        private static bool CanLoadScene()
         {
-            if (m_ControllerStack.Count > 0)
+            if (Object.GetState() == ManagerObject.State.SHIELD_FADE_IN) //if scene load shield is active
             {
-                return m_ControllerStack.Peek();
+                Debug.LogWarning("Scene is fading in/out, this load will be ignored");
+                return false;
             }
 
-            return null;
+            return true;
         }
 
-        public static void EndFadedIn()
+
+        static void OnSceneLoaded(SSControllerService info)
         {
-            m_MainController.OnShown();
-        }
+            var controller = info.controller;
 
-        public static void EndFadedOut()
-        {
-            if (m_MainController != null)
-            {
-                m_MainController.OnHidden();
-            }
-
-            SceneManager.LoadScene(m_MainSceneName, LoadSceneMode.Single);
-        }
-
-        static void Unload()
-        {
-            if (m_ControllerStack.Count > 0)
-            {
-                SceneManager.UnloadSceneAsync(m_ControllerStack.Pop().Data.scene);
-            }
-        }
-
-        static void OnSceneLoaded(Scene scene, LoadSceneMode mode)
-        {
-            // Get Controller
-            var controller = GetController(scene);
-            if (controller == null)
-            {
-                m_ControllerStack.Push(null);
-                return;
-            }
-
-            // Loading Scene
             if (controller.SceneName() == LoadingSceneName)
             {
-                controller.SetupCanvas(98);
+                controller.SetupCanvas(100);
                 m_LoadingController = controller;
                 GameObject.DontDestroyOnLoad(m_LoadingController.gameObject);
                 LoadingAnimation(false);
-
                 return;
             }
 
-            // Single Mode automatically destroy all scenes, so we have to clear the stack.
-            if (mode == LoadSceneMode.Single)
-            {
-                m_ControllerStack.Clear();
-            }
+            if (m_DataQueue.Count == 0)            
+                return;
 
-            // Unload resources and collect GC.
-            //Resources.UnloadUnusedAssets();
-            //System.GC.Collect();
-
-            // Get Data
-            if (m_DataQueue.Count == 0)
-            {
-                m_DataQueue.Enqueue(new Data(null, null, null));
-            }
             var data = m_DataQueue.Dequeue();
-            data.scene = scene;
 
-            // Push the current scene to the stack.
-            m_ControllerStack.Push(controller);
+            if (data.loadMode == LoadSceneMode.Single)
+                _controllerStack.Clear();
 
-            // Setup controller
+            data.scene = info.scene;
+            _controllerStack.Push(controller);
+
             controller.Data = data;
-            controller.SetupCanvas(m_ControllerStack.Count - 1);
-            controller.CreateShield();
+            controller.SetupCanvas(_controllerStack.Count - 1);
             controller.OnActive(data.data);
 
-            // Animation
-            if (m_ControllerStack.Count == 1)
+            if (_controllerStack.Count == 1)
             {
-                // Main Scene
                 m_MainController = controller;
-
-                // Fade
-                Object.FadeInScene();
+                Object.FadeInScene().Forget();
             }
             else
-            {
-                // Popup Scene
                 controller.Show();
-            }
-        }
-
-        static Controller GetController(Scene scene)
-        {
-            var roots = scene.GetRootGameObjects();
-            for (int i = 0; i < roots.Length; i++)
-            {
-                var controller = roots[i].GetComponent<Controller>();
-                if (controller != null)
-                {
-                    return controller;
-                }
-            }
-            return null;
         }
     }
 }

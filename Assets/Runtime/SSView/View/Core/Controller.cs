@@ -3,26 +3,31 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
 using UnityEngine.SceneManagement;
+using Gemity.Common;
 
 namespace SS.View
 {
+    internal class SSControllerService : BaseService<SSControllerService>
+    {
+        internal const string SceneLoaded = "SceneLoaded";
+        internal Controller controller;
+        internal Scene scene;
+    }
+
     public abstract class Controller : MonoBehaviour
     {
         [SerializeField] protected Canvas _canvas;
-
         [SerializeField] protected Camera _camera;
 
         /// <summary>
         /// When you popup a fullscreen view using SceneManager.Popup(), the system will automatically deactivate the view under it ( for better performance ).
         /// When you close it using SceneManager.Close(), the view which was under it will be activated.
         /// </summary>
-        [SerializeField]
         public bool FullScreen;
 
         /// <summary>
         /// The animation.
         /// </summary>
-        [SerializeField]
         public SceneAnimation Animation;
 
         /// <summary>
@@ -70,10 +75,24 @@ namespace SS.View
             Manager.Close();
         }
 
+        internal async void Show()
+        {
+            await Animation.Show();
+            Manager.OnShown(this);
+            OnShown();
+        }
+
+        internal async void Hide()
+        {
+            await Animation.Hide();
+            Manager.OnHidden(this);
+            OnHidden();
+        }
+
         public Manager.Data Data
         {
             get;
-            set;
+            internal set;
         }
 
         public Canvas Canvas
@@ -100,44 +119,6 @@ namespace SS.View
             }
         }
 
-        GameObject m_Shield;
-
-        public void Show()
-        {
-            Animation.StartShow();
-        }
-
-        public void Hide()
-        {
-            Animation.StartHide();
-        }
-
-        public void CreateShield()
-        {
-            return;
-            if (m_Shield == null && _canvas.sortingOrder > 0)
-            {
-                m_Shield = new GameObject("Shield");
-                m_Shield.layer = LayerMask.NameToLayer("UI");
-
-                Image image = m_Shield.AddComponent<Image>();
-                image.color = Manager.ShieldColor;
-
-                Transform t = m_Shield.transform;
-                t.SetParent(_canvas.transform);
-                t.SetSiblingIndex(0);
-                t.localScale = Vector3.one;
-                t.localPosition = new Vector3(t.localPosition.x, t.localPosition.y, 0);
-
-                RectTransform rt = t.GetComponent<RectTransform>();
-                rt.anchorMin = Vector2.zero;
-                rt.anchorMax = Vector2.one;
-                rt.pivot = new Vector2(0.5f, 0.5f);
-                rt.offsetMax = new Vector2(2, 2);
-                rt.offsetMin = new Vector2(-2, -2);
-            }
-        }
-
         public void SetupCanvas(int sortingOrder)
         {
             if (_canvas == null)
@@ -149,6 +130,18 @@ namespace SS.View
                 _canvas.sortingOrder = sortingOrder;
                 _canvas.worldCamera = Manager.Object.UICamera;
             }
+        }
+
+        public virtual void Awake()
+        {
+            Animation.Init();
+            Animation.HideBeforeShowing();
+            ServicesDispatch.Execute<SSControllerService>(SSControllerService.SceneLoaded, new() { controller = this, scene = gameObject.scene });
+        }
+
+        private void Reset()
+        {
+            Animation = GetComponentInChildren<SceneAnimation>();
         }
     }
 }

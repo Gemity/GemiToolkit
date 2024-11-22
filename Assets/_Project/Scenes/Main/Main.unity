@@ -132,30 +132,14 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1387961}
-  - component: {fileID: 1387960}
+  - component: {fileID: 1387962}
   m_Layer: 5
-  m_Name: Template
+  m_Name: Main
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!114 &1387960
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1387959}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: bdb4547e395294bf9be75789ed4d2f4e, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  _canvas: {fileID: 932985009}
-  _camera: {fileID: 0}
-  FullScreen: 1
-  Animation: {fileID: 1997761294}
 --- !u!4 &1387961
 Transform:
   m_ObjectHideFlags: 0
@@ -172,6 +156,22 @@ Transform:
   - {fileID: 932985010}
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1387962
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1387959}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ece117d521a0f444d91f965b94e39b28, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  _canvas: {fileID: 932985009}
+  _camera: {fileID: 0}
+  FullScreen: 1
+  Animation: {fileID: 1997761294}
 --- !u!1 &407137575
 GameObject:
   m_ObjectHideFlags: 0
